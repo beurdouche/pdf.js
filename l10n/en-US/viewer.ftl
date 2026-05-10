@@ -785,3 +785,90 @@ pdfjs-views-manager-paste-button-after =
 pdfjs-new-badge-content = NEW
 
 pdfjs-views-manager-waiting-for-file = Uploading file…
+
+## Signature Properties (digital signature verification)
+
+pdfjs-signature-properties-button =
+    .title = Digital Signature properties
+    .aria-label = Digital Signature properties
+pdfjs-signature-properties-button-label = Digital Signature properties
+
+## Banner shown above the signature list summarising the overall
+## verification state of the document. Each variant is selected by the
+## viewer based on the worst per-signature status; one signature is
+## enough to lower the banner.
+##
+## Variables:
+##   $count (Number) - number of signatures at the worst level.
+
+pdfjs-signature-properties-banner-verified = Document has a valid signature
+pdfjs-signature-properties-banner-unknown =
+    { $count ->
+        [one] Document signed but { $count } signature could not be verified
+       *[other] Document signed but { $count } signatures could not be verified
+    }
+pdfjs-signature-properties-banner-untrusted =
+    { $count ->
+        [one] Document signed with { $count } certificate that is not trusted
+       *[other] Document signed with { $count } certificates that are not trusted
+    }
+pdfjs-signature-properties-banner-expired =
+    { $count ->
+        [one] Document signed with { $count } expired certificate
+       *[other] Document signed with { $count } expired certificates
+    }
+pdfjs-signature-properties-banner-invalid =
+    { $count ->
+        [one] Document has { $count } invalid signature
+       *[other] Document has { $count } invalid signatures
+    }
+pdfjs-signature-properties-banner-revoked =
+    { $count ->
+        [one] Document signed with { $count } revoked certificate
+       *[other] Document signed with { $count } revoked certificates
+    }
+
+## Per-signature status row.
+
+pdfjs-signature-properties-status-verified = Status: Signature verified
+pdfjs-signature-properties-status-unknown = Status: Unable to verify (unsupported)
+pdfjs-signature-properties-status-untrusted = Status: Signature verified
+pdfjs-signature-properties-status-expired = Status: Signature verified
+pdfjs-signature-properties-status-invalid = Status: Signature invalid
+pdfjs-signature-properties-status-revoked = Status: Signature verified
+
+## Per-signature certificate row. The "with-…" variants embed extra
+## context inside the parentheses.
+##
+## Variables:
+##   $issuer (String) - issuer or subject common name from the cert.
+##   $reason (String) - one-word reason for the failure (e.g.
+##                      "revoked", "self-signed").
+##   $dateObj (Date)  - notAfter date for the expired-with-date form.
+
+pdfjs-signature-properties-certificate-trusted = Certificate: Trusted ({ $issuer })
+pdfjs-signature-properties-certificate-unknown = Certificate: Unavailable
+pdfjs-signature-properties-certificate-untrusted = Certificate: Untrusted
+pdfjs-signature-properties-certificate-untrusted-with-reason = Certificate: Untrusted ({ $reason })
+pdfjs-signature-properties-certificate-untrusted-unknown-issuer = Certificate: Unknown issuer ({ $issuer })
+pdfjs-signature-properties-certificate-untrusted-self-signed = Certificate: Self-signed ({ $issuer })
+pdfjs-signature-properties-certificate-untrusted-untrusted-issuer = Certificate: Untrusted issuer ({ $issuer })
+pdfjs-signature-properties-certificate-expired = Certificate: Expired
+pdfjs-signature-properties-certificate-expired-with-date = Certificate: Expired ({ DATETIME($dateObj, dateStyle: "medium") })
+pdfjs-signature-properties-certificate-revoked = Certificate: Revoked
+pdfjs-signature-properties-certificate-revoked-with-reason = Certificate: Revoked ({ $reason })
+
+##
+
+pdfjs-signature-properties-view-certificate = View certificate
+
+# Variables:
+#   $reason (String) - the reason text from the signature dictionary.
+pdfjs-signature-properties-reason = Reason: { $reason }
+# Variables:
+#   $dateObj (Date) - the signing time from the /Sig dict's /M entry.
+pdfjs-signature-properties-timestamp = Timestamp: { DATETIME($dateObj, dateStyle: "short", timeStyle: "medium") }
+# Variables:
+#   $count (Number) - number of nested sub-signatures (one per earlier
+#                     incremental revision of the document).
+pdfjs-signature-properties-sub-signatures = Sub-signatures ({ $count })

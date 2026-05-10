@@ -93,6 +93,7 @@ import { Preferences } from "web-preferences";
 import { RenderingStates } from "./renderable_view.js";
 import { SecondaryToolbar } from "web-secondary_toolbar";
 import { SignatureManager } from "web-signature_manager";
+import { SignaturePropertiesManager } from "web-signature_properties_manager";
 import { Toolbar } from "web-toolbar";
 import { ViewHistory } from "./view_history.js";
 import { ViewsManager } from "web-views_manager";
@@ -163,6 +164,8 @@ const PDFViewerApplication = {
   l10n: null,
   /** @type {AnnotationEditorParams} */
   annotationEditorParams: null,
+  /** @type {SignaturePropertiesManager|null} */
+  signaturePropertiesManager: null,
   /** @type {ImageAltTextSettings} */
   imageAltTextSettings: null,
   isInitialViewSet: false,
@@ -1171,6 +1174,7 @@ const PDFViewerApplication = {
       this.pdfViewer.setDocument(null);
       this.pdfLinkService.setDocument(null);
       this.pdfDocumentProperties?.setDocument(null);
+      this.signaturePropertiesManager?.reset();
     }
     this.pdfLinkService.externalLinkEnabled = true;
     this.store = null;
@@ -1808,10 +1812,32 @@ const PDFViewerApplication = {
     }
 
     if (info.IsSignaturesPresent) {
-      console.warn("Warning: Digital signatures validation is not supported");
+      this._maybeInitSignatureProperties(pdfDocument);
     }
 
     this.eventBus.dispatch("metadataloaded", { source: this });
+  },
+
+  /**
+   * @private
+   */
+  async _maybeInitSignatureProperties(pdfDocument) {
+    if (!AppOptions.get("enableSignatureVerification")) {
+      return;
+    }
+    const verifier = this.externalServices.createSignatureVerifier?.();
+    if (!verifier) {
+      return;
+    }
+    if (pdfDocument !== this.pdfDocument) {
+      return;
+    }
+    this.signaturePropertiesManager ??= new SignaturePropertiesManager({
+      appConfig: this.appConfig.toolbar,
+      verifier,
+      eventBus: this.eventBus,
+    });
+    this.signaturePropertiesManager.loadFromDocument(pdfDocument);
   },
 
   /**
@@ -2935,6 +2961,12 @@ function closeEditorUndoBar(evt) {
   }
 }
 
+function closeSignatureProperties({ target }) {
+  if (this.signaturePropertiesManager?.shouldCloseOnClick(target)) {
+    this.signaturePropertiesManager.close();
+  }
+}
+
 function onBeforeUnload(evt) {
   if (this._hasChanges()) {
     evt.preventDefault();
@@ -2947,6 +2979,7 @@ function onBeforeUnload(evt) {
 function onClick(evt) {
   closeSecondaryToolbar.call(this, evt);
   closeEditorUndoBar.call(this, evt);
+  closeSignatureProperties.call(this, evt);
 }
 
 function onKeyUp(evt) {
@@ -3160,6 +3193,10 @@ function onKeyDown(evt) {
       case 27: // esc key
         if (this.secondaryToolbar?.isOpen) {
           this.secondaryToolbar.close();
+          handled = true;
+        }
+        if (this.signaturePropertiesManager?.isOpen) {
+          this.signaturePropertiesManager.close();
           handled = true;
         }
         if (!this.supportsIntegratedFind && this.findBar?.opened) {

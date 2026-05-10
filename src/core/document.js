@@ -1990,6 +1990,154 @@ class PDFDocument {
     return shadow(this, "fieldObjects", promise);
   }
 
+  #collectSignatureFields(fields, out, visitedRefs) {
+    if (!Array.isArray(fields)) {
+      return;
+    }
+    for (const fieldRef of fields) {
+      if (fieldRef instanceof Ref) {
+        if (visitedRefs.has(fieldRef)) {
+          continue;
+        }
+        visitedRefs.put(fieldRef);
+      }
+      const field = this.xref.fetchIfRef(fieldRef);
+      if (!(field instanceof Dict)) {
+        continue;
+      }
+      if (field.has("Kids")) {
+        this.#collectSignatureFields(field.get("Kids"), out, visitedRefs);
+        continue;
+      }
+      if (!isName(field.get("FT"), "Sig")) {
+        continue;
+      }
+      const sigDict = this.xref.fetchIfRef(field.get("V"));
+      if (!(sigDict instanceof Dict)) {
+        continue;
+      }
+      const parsed = this.#parseSignatureDict(field, sigDict, fieldRef);
+      if (parsed) {
+        out.push(parsed);
+      }
+    }
+  }
+
+  #parseSignatureDict(field, sigDict, fieldRef) {
+    const byteRange = sigDict.get("ByteRange");
+    if (
+      !Array.isArray(byteRange) ||
+      byteRange.length !== 4 ||
+      byteRange.some(n => !Number.isInteger(n) || n < 0)
+    ) {
+      return null;
+    }
+    const contents = sigDict.get("Contents");
+    if (typeof contents !== "string" || contents.length === 0) {
+      return null;
+    }
+
+    const filterName = sigDict.get("Filter");
+    const filter = filterName instanceof Name ? filterName.name : null;
+    const subFilterName = sigDict.get("SubFilter");
+    const subFilter = subFilterName instanceof Name ? subFilterName.name : null;
+
+    let signatureType = null;
+    if (subFilter === "adbe.pkcs7.detached") {
+      signatureType = 0;
+    } else if (subFilter === "adbe.pkcs7.sha1") {
+      signatureType = 1;
+    }
+
+    // Slice the two ByteRange byte spans out of the underlying PDF stream.
+    // ByteRange = [a, b, c, d] means signed bytes are [a..a+b] and [c..c+d];
+    // the gap covers the /Contents hex blob itself.
+    const [a, b, c, d] = byteRange;
+    const stream = this.stream;
+    const data = [stream.getByteRange(a, a + b), stream.getByteRange(c, c + d)];
+
+    const pkcs7 = stringToBytes(contents);
+
+    const t = field.get("T");
+    const fieldName = typeof t === "string" ? stringToPDFString(t) : "";
+    const name = sigDict.get("Name");
+    const reason = sigDict.get("Reason");
+    const location = sigDict.get("Location");
+    const contactInfo = sigDict.get("ContactInfo");
+    const m = sigDict.get("M");
+
+    const refKey = fieldRef instanceof Ref ? fieldRef.toString() : "inline";
+    const id = `${refKey}:${a}-${b}-${c}-${d}`;
+
+    const fileLength = stream.end || 0;
+    const lastSignedByte = c + d;
+
+    return {
+      id,
+      fieldName,
+      signerName: typeof name === "string" ? stringToPDFString(name) : null,
+      reason: typeof reason === "string" ? stringToPDFString(reason) : null,
+      location:
+        typeof location === "string" ? stringToPDFString(location) : null,
+      contactInfo:
+        typeof contactInfo === "string" ? stringToPDFString(contactInfo) : null,
+      signingTime: typeof m === "string" ? m : null,
+      filter,
+      subFilter,
+      signatureType,
+      byteRange,
+      pkcs7,
+      data,
+      revisionIndex: 0,
+      parentId: null,
+      coversWholeDocument: fileLength > 0 && lastSignedByte >= fileLength - 100,
+    };
+  }
+
+  get signatures() {
+    const promise = this.pdfManager
+      .ensureDoc("formInfo")
+      .then(async formInfo => {
+        if (!formInfo.hasSignatures || !formInfo.hasFields) {
+          return null;
+        }
+        const annotationGlobals = await this.annotationGlobals;
+        if (!annotationGlobals) {
+          return null;
+        }
+        const fields = annotationGlobals.acroForm.get("Fields");
+
+        const collected = [];
+        this.#collectSignatureFields(fields, collected, new RefSet());
+
+        // Group sub-signatures by ByteRange containment: outer revision is
+        // the largest covering signature (largest c + d). Sort descending,
+        // then point each later signature at the smallest enclosing parent
+        // that came before it.
+        collected.sort(
+          (a, b) =>
+            b.byteRange[2] + b.byteRange[3] - (a.byteRange[2] + a.byteRange[3])
+        );
+        for (let i = 0, ii = collected.length; i < ii; i++) {
+          const sig = collected[i];
+          sig.revisionIndex = i;
+          for (let j = i - 1; j >= 0; j--) {
+            const candidate = collected[j];
+            if (
+              candidate.byteRange[2] + candidate.byteRange[3] >
+              sig.byteRange[2] + sig.byteRange[3]
+            ) {
+              sig.parentId = candidate.id;
+              break;
+            }
+          }
+        }
+        return collected.length ? collected : null;
+      });
+
+    return shadow(this, "signatures", promise);
+  }
+
   get hasJSActions() {
     const promise = this.pdfManager.ensureDoc("_parseHasJSActions");
     return shadow(this, "hasJSActions", promise);

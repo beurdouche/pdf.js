@@ -549,6 +549,10 @@ class WorkerMessageHandler {
         .then(fieldObjects => fieldObjects?.allFields || null);
     });
 
+    handler.on("GetSignatures", function (data) {
+      return pdfManager.ensureDoc("signatures");
+    });
+
     handler.on("HasJSActions", function (data) {
       return pdfManager.ensureDoc("hasJSActions");
     });

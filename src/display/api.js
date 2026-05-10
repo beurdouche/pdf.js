@@ -1075,6 +1075,17 @@ class PDFDocumentProxy {
   }
 
   /**
+   * @returns {Promise<Array<Object> | null>} A promise that is resolved
+   *   with an {Array} of digital signatures present in the document
+   *   (each with metadata such as signerName, reason, signingTime,
+   *   ... plus the PKCS#7 blob and signed-data byte spans needed for
+   *   verification), or `null` when the document has no signatures.
+   */
+  getSignatures() {
+    return this._transport.getSignatures();
+  }
+
+  /**
    * @returns {Promise<boolean>} A promise that is resolved with `true`
    *   if some /AcroForm fields have JavaScript actions.
    */
@@ -3015,6 +3026,10 @@ class WorkerTransport {
 
   getFieldObjects() {
     return this.#cacheSimpleMethod("GetFieldObjects");
+  }
+
+  getSignatures() {
+    return this.#cacheSimpleMethod("GetSignatures");
   }
 
   hasJSActions() {
