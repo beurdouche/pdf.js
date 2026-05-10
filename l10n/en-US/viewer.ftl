@@ -801,7 +801,7 @@ pdfjs-signature-properties-button-label = Digital Signature properties
 ## Variables:
 ##   $count (Number) - number of signatures at the worst level.
 
-pdfjs-signature-properties-banner-verified = Document has a valid signature
+pdfjs-signature-properties-banner-verified = Document has a valid digital signature
 pdfjs-signature-properties-banner-unknown =
     { $count ->
         [one] Document signed but { $count } signature could not be verified

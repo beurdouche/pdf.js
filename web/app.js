@@ -1812,7 +1812,10 @@ const PDFViewerApplication = {
     }
 
     if (info.IsSignaturesPresent) {
-      this._maybeInitSignatureProperties(pdfDocument);
+      const success = this._maybeInitSignatureProperties(pdfDocument);
+      if (!success) {
+        console.warn("Warning: Digital signatures validation is not supported");
+      }
     }
 
     this.eventBus.dispatch("metadataloaded", { source: this });
@@ -1820,17 +1823,21 @@ const PDFViewerApplication = {
 
   /**
    * @private
+   * @returns {boolean} `true` when signature verification was wired up;
+   *   `false` when the runtime doesn't expose a verifier (everything
+   *   except the Firefox build) or the option is turned off.
    */
-  async _maybeInitSignatureProperties(pdfDocument) {
+  _maybeInitSignatureProperties(pdfDocument) {
     if (!AppOptions.get("enableSignatureVerification")) {
-      return;
+      return false;
     }
-    const verifier = this.externalServices.createSignatureVerifier?.();
+    const verifier = this.externalServices.createSignatureVerifier();
     if (!verifier) {
-      return;
+      return false;
     }
     if (pdfDocument !== this.pdfDocument) {
-      return;
+      // Don't warn about a previous document.
+      return true;
     }
     this.signaturePropertiesManager ??= new SignaturePropertiesManager({
       appConfig: this.appConfig.toolbar,
@@ -1838,6 +1845,7 @@ const PDFViewerApplication = {
       eventBus: this.eventBus,
     });
     this.signaturePropertiesManager.loadFromDocument(pdfDocument);
+    return true;
   },
 
   /**
