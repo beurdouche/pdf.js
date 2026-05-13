@@ -140,17 +140,29 @@ function expirationDateForCert(cert) {
   const now = Date.now();
   const entries =
     Array.isArray(cert.chain) && cert.chain.length ? cert.chain : [cert];
+  // Walk the chain preferring a past notAfter — that's the cert that
+  // actually caused the "expired" verdict. NSS sometimes does not
+  // surface the expired issuer in `signerCertificate.issuer`, in which
+  // case the chain we receive only has the leaf (with a still-valid
+  // notAfter). Fall back to the first parseable date so the row at
+  // least shows *some* meaningful information instead of an empty
+  // parenthetical.
+  let fallback = null;
   for (const entry of entries) {
     if (typeof entry?.notAfter !== "string" || !entry.notAfter) {
       continue;
     }
     const date = new Date(entry.notAfter);
     const ts = date.getTime();
-    if (Number.isFinite(ts) && ts < now) {
+    if (!Number.isFinite(ts)) {
+      continue;
+    }
+    if (ts < now) {
       return date;
     }
+    fallback ??= date;
   }
-  return null;
+  return fallback;
 }
 
 class SignaturePropertiesManager {
@@ -448,14 +460,15 @@ class SignaturePropertiesManager {
       li.append(reason);
     }
 
-    // Certificate row.
+    // Certificate row — skipped when the signature itself is invalid:
+    // NSS doesn't return a signerCertificate in that case, so the row
+    // would be empty noise next to the more informative "Reason: …"
+    // line.
     const cert = result.certificate;
-    const certRow = document.createElement("div");
     let certKind = "unknown";
     if (cert) {
       switch (result.status) {
         case "verified":
-        case "invalid":
           certKind = "trusted";
           break;
         case "expired":
@@ -471,34 +484,36 @@ class SignaturePropertiesManager {
           certKind = "unknown";
       }
     }
-    certRow.classList.add("row", `cert--${certKind}`);
-    const certLabel = document.createElement("span");
-    let l10nId = CERT_L10N_IDS[certKind];
-    let l10nArgs = null;
-    if (cert?.issuerCN && certKind === "trusted") {
-      l10nArgs = { issuer: cert.issuerCN };
-    } else if (certKind === "expired") {
-      // For expired, the parenthetical is the expiration date itself
-      // (could be the leaf or any issuer up the chain). Pass a Date
-      // through Fluent so the viewer locale formats it, not the
-      // browser locale.
-      const date = expirationDateForCert(cert);
-      if (date) {
-        l10nId = CERT_EXPIRED_WITH_DATE_L10N_ID;
-        l10nArgs = { dateObj: date.valueOf() };
+    if (result.status !== "invalid") {
+      const certRow = document.createElement("div");
+      certRow.classList.add("row", `cert--${certKind}`);
+      const certLabel = document.createElement("span");
+      let l10nId = CERT_L10N_IDS[certKind];
+      let l10nArgs = null;
+      if (cert?.issuerCN && certKind === "trusted") {
+        l10nArgs = { issuer: cert.issuerCN };
+      } else if (certKind === "expired") {
+        // For expired, the parenthetical is the expiration date itself
+        // (could be the leaf or any issuer up the chain). Pass a Date
+        // through Fluent so the viewer locale formats it, not the
+        // browser locale.
+        const date = expirationDateForCert(cert);
+        if (date) {
+          l10nId = CERT_EXPIRED_WITH_DATE_L10N_ID;
+          l10nArgs = { dateObj: date.valueOf() };
+        }
+      } else if (certKind === "untrusted") {
+        const label = untrustedCertLabel(result.errorCode, cert?.issuerCN);
+        l10nId = label.id;
+        l10nArgs = label.args;
       }
-    } else if (certKind === "untrusted") {
-      const label = untrustedCertLabel(result.errorCode, cert?.issuerCN);
-      l10nId = label.id;
-      l10nArgs = label.args;
+      certLabel.setAttribute("data-l10n-id", l10nId);
+      if (l10nArgs) {
+        certLabel.setAttribute("data-l10n-args", JSON.stringify(l10nArgs));
+      }
+      certRow.append(certLabel);
+      li.append(certRow);
     }
-    certLabel.setAttribute("data-l10n-id", l10nId);
-    if (l10nArgs) {
-      certLabel.setAttribute("data-l10n-args", JSON.stringify(l10nArgs));
-    }
-    certRow.append(certLabel);
-
-    li.append(certRow);
 
     if (result.status === "untrusted" && result.message) {
       const detail = document.createElement("div");
@@ -511,17 +526,6 @@ class SignaturePropertiesManager {
       detail.className = "detail";
       detail.textContent = result.message;
       li.append(detail);
-    }
-
-    if (sig.reason) {
-      const reason = document.createElement("div");
-      reason.className = "detail";
-      reason.setAttribute("data-l10n-id", "pdfjs-signature-properties-reason");
-      reason.setAttribute(
-        "data-l10n-args",
-        JSON.stringify({ reason: sig.reason })
-      );
-      li.append(reason);
     }
 
     const signingDate = PDFDateString.toDateObject(sig.signingTime);
