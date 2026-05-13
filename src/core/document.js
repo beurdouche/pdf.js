@@ -2023,6 +2023,13 @@ class PDFDocument {
     }
   }
 
+  // The /ByteRange of a signature that covers the whole document usually
+  // ends a few bytes before the file's actual end — the trailer,
+  // `startxref` offset and `%%EOF` marker are conventionally left outside
+  // the signed range. 100 bytes covers the worst case (large
+  // `startxref` offsets, optional whitespace) without false positives.
+  static #WHOLE_DOCUMENT_TAIL_FUZZ = 100;
+
   #parseSignatureDict(field, sigDict, fieldRef) {
     const byteRange = sigDict.get("ByteRange");
     if (
@@ -2090,7 +2097,9 @@ class PDFDocument {
       data,
       revisionIndex: 0,
       parentId: null,
-      coversWholeDocument: fileLength > 0 && lastSignedByte >= fileLength - 100,
+      coversWholeDocument:
+        fileLength > 0 &&
+        lastSignedByte >= fileLength - PDFDocument.#WHOLE_DOCUMENT_TAIL_FUZZ,
     };
   }
 

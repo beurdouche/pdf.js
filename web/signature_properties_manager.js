@@ -13,16 +13,62 @@
  * limitations under the License.
  */
 
-import { AnnotationEditorType, PDFDateString } from "pdfjs-lib";
+import { AnnotationEditorType, makeArr, PDFDateString } from "pdfjs-lib";
 
-const STATUS_PRIORITY = {
-  invalid: 5,
-  revoked: 4,
-  expired: 3,
-  untrusted: 2,
-  unknown: 1,
-  verified: 0,
+// Per-status descriptor keyed by the status code returned by the verifier.
+// `priority` drives worst-status aggregation, `severity` drives the banner
+// colour bucket, and the two Fluent IDs are the explicit strings used by
+// the banner / status rows (no `${status}` template construction so the
+// IDs are greppable).
+const STATUS_INFO = {
+  verified: {
+    priority: 0,
+    severity: "verified",
+    bannerId: "pdfjs-signature-properties-banner-verified",
+    statusId: "pdfjs-signature-properties-status-verified",
+  },
+  unknown: {
+    priority: 1,
+    severity: "error",
+    bannerId: "pdfjs-signature-properties-banner-unknown",
+    statusId: "pdfjs-signature-properties-status-unknown",
+  },
+  untrusted: {
+    priority: 2,
+    severity: "warn",
+    bannerId: "pdfjs-signature-properties-banner-untrusted",
+    statusId: "pdfjs-signature-properties-status-untrusted",
+  },
+  expired: {
+    priority: 3,
+    severity: "warn",
+    bannerId: "pdfjs-signature-properties-banner-expired",
+    statusId: "pdfjs-signature-properties-status-expired",
+  },
+  revoked: {
+    priority: 4,
+    severity: "error",
+    bannerId: "pdfjs-signature-properties-banner-revoked",
+    statusId: "pdfjs-signature-properties-status-revoked",
+  },
+  invalid: {
+    priority: 5,
+    severity: "error",
+    bannerId: "pdfjs-signature-properties-banner-invalid",
+    statusId: "pdfjs-signature-properties-status-invalid",
+  },
 };
+
+const CERT_L10N_IDS = {
+  trusted: "pdfjs-signature-properties-certificate-trusted",
+  unknown: "pdfjs-signature-properties-certificate-unknown",
+  untrusted: "pdfjs-signature-properties-certificate-untrusted",
+  expired: "pdfjs-signature-properties-certificate-expired",
+  revoked: "pdfjs-signature-properties-certificate-revoked",
+};
+
+const CERT_EXPIRED_WITH_DATE_L10N_ID =
+  "pdfjs-signature-properties-certificate-expired-with-date";
 
 function bannerStateForResults(results) {
   if (results.length === 0) {
@@ -30,7 +76,11 @@ function bannerStateForResults(results) {
   }
   let worst = "verified";
   for (const r of results) {
-    if (r && r.status && STATUS_PRIORITY[r.status] > STATUS_PRIORITY[worst]) {
+    if (
+      r &&
+      r.status &&
+      STATUS_INFO[r.status].priority > STATUS_INFO[worst].priority
+    ) {
       worst = r.status;
     }
   }
@@ -42,33 +92,13 @@ function bannerStateForResults(results) {
       count++;
     }
   }
-  // The banner reduces to 3 visual severities. The message text still picks
-  // the wording specific to `worst`.
-  //   verified            → green   (all signatures verified)
-  //   untrusted / expired → orange  (signature is cryptographically fine,
-  //                                  only cert trust or validity is the
-  //                                  issue)
-  //   invalid / unknown   → red     (signature itself failed or could not
-  //                                  be checked)
-  let severity;
-  switch (worst) {
-    case "verified":
-      severity = "verified";
-      break;
-    case "untrusted":
-    case "expired":
-      severity = "warn";
-      break;
-    default:
-      severity = "error";
-  }
-  return { worst, severity, count };
+  return { worst, severity: STATUS_INFO[worst].severity, count };
 }
 
-// For an `untrusted` certificate, pick the most specific Fluent label /
-// args we can — preferring the structured "Certificate: <reason>
-// (<issuer>)" form when we recognise the error code, and falling back to
-// the generic "Certificate: Untrusted (<reason>)".
+// For an `untrusted` certificate, pick the most specific Fluent label.
+// When the error code matches one of the recognised cases we have a
+// structured "Certificate: <reason> (<issuer>)" string; otherwise we
+// fall back to the bare "Certificate: Untrusted".
 function untrustedCertLabel(errorCode, issuerCN) {
   const code = (errorCode || "").toUpperCase();
   const args = issuerCN ? { issuer: issuerCN } : null;
@@ -90,59 +120,19 @@ function untrustedCertLabel(errorCode, issuerCN) {
       args,
     };
   }
-  const reason = shortCertReason(errorCode);
-  if (reason) {
-    return {
-      id: "pdfjs-signature-properties-certificate-untrusted-with-reason",
-      args: { reason },
-    };
-  }
   return {
     id: "pdfjs-signature-properties-certificate-untrusted",
     args: null,
   };
 }
 
-// Map a chrome-side errorCode string to a single short word that fits in the
-// "Certificate: Expired (<date>)" / generic "Certificate: Untrusted (<reason>)"
-// labels. Returns null when no concise reason is available.
-function shortCertReason(errorCode) {
-  if (!errorCode || errorCode === "NS_OK") {
-    return null;
-  }
-  const code = errorCode.toUpperCase();
-  if (code.includes("UNKNOWN_ISSUER")) {
-    return "unknown issuer";
-  }
-  if (code.includes("UNTRUSTED_ISSUER") || code.includes("UNTRUSTED_CERT")) {
-    return "untrusted";
-  }
-  if (code.includes("SELF_SIGNED")) {
-    return "self-signed";
-  }
-  if (code.includes("REVOKED")) {
-    return "revoked";
-  }
-  if (code.includes("EXPIRED")) {
-    return "expired";
-  }
-  if (code.includes("NOT_YET_VALID")) {
-    return "not-yet-valid";
-  }
-  if (code.includes("KEY_USAGE")) {
-    return "key-usage";
-  }
-  if (code.includes("SIGNATURE")) {
-    return "bad-signature";
-  }
-  return null;
-}
-
 // For an `expired` certificate: NSS may have flagged either the leaf
 // (SEC_ERROR_EXPIRED_CERTIFICATE) or any issuer up the chain
 // (SEC_ERROR_EXPIRED_ISSUER_CERTIFICATE). We want the parenthetical
-// to show the date that actually expired, so walk the chain and
+// to show the date that actually expired, so walk leaf + chain and
 // return the first notAfter that is already in the past as a Date.
+// If nothing is in the past we return null and the caller renders the
+// generic "Certificate: Expired" label without a date.
 function expirationDateForCert(cert) {
   if (!cert) {
     return null;
@@ -151,17 +141,14 @@ function expirationDateForCert(cert) {
   const entries =
     Array.isArray(cert.chain) && cert.chain.length ? cert.chain : [cert];
   for (const entry of entries) {
-    if (typeof entry?.notAfter === "string" && entry.notAfter) {
-      const date = new Date(entry.notAfter);
-      const ts = date.getTime();
-      if (Number.isFinite(ts) && ts < now) {
-        return date;
-      }
+    if (typeof entry?.notAfter !== "string" || !entry.notAfter) {
+      continue;
     }
-  }
-  if (typeof cert.notAfter === "string" && cert.notAfter) {
-    const date = new Date(cert.notAfter);
-    return Number.isNaN(date.getTime()) ? null : date;
+    const date = new Date(entry.notAfter);
+    const ts = date.getTime();
+    if (Number.isFinite(ts) && ts < now) {
+      return date;
+    }
   }
   return null;
 }
@@ -185,12 +172,28 @@ class SignaturePropertiesManager {
 
   #docOpen = false;
 
+  // Set whenever state changes while the panel is closed, so that opening it
+  // forces a fresh render. While the panel is hidden, building the list /
+  // banner DOM is pure churn — only the toolbar button is visible, and that
+  // is updated via #updateButtonState().
+  #needsRender = false;
+
   constructor({ appConfig, verifier, eventBus }) {
     this.#appConfig = appConfig;
     this.#verifier = verifier;
     this.#eventBus = eventBus;
 
-    appConfig.signaturePropertiesButton.addEventListener("click", () => {
+    const button = appConfig.signaturePropertiesButton;
+    // Loading dots: three real spans (hidden by `.toolbarButton > span`)
+    // that the `state-loading` CSS modifier turns into pulsing circles
+    // with staggered `animation-delay`. Real elements (not gradient
+    // keyframes) let each dot animate independently.
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement("span");
+      dot.className = "loadingDot";
+      button.append(dot);
+    }
+    button.addEventListener("click", () => {
       this.#toggle();
     });
   }
@@ -262,7 +265,6 @@ class SignaturePropertiesManager {
     // verifies them in the background.
     for (const sig of this.#signatures) {
       this.#results.set(sig.id, {
-        signatureId: sig.id,
         status: "unknown",
         errorCode: null,
         message: null,
@@ -284,6 +286,7 @@ class SignaturePropertiesManager {
     this.#signatures = [];
     this.#results.clear();
     this.#pendingVerify.clear();
+    this.#needsRender = false;
     this.#hideButton();
     this.#close();
     this.#updateButtonState();
@@ -328,6 +331,9 @@ class SignaturePropertiesManager {
       "aria-expanded",
       "true"
     );
+    if (this.#needsRender) {
+      this.#render();
+    }
   }
 
   #close() {
@@ -340,9 +346,15 @@ class SignaturePropertiesManager {
   }
 
   #render() {
+    if (!this.#isOpen) {
+      // Defer DOM work until the user actually opens the panel.
+      this.#needsRender = true;
+      return;
+    }
+    this.#needsRender = false;
     const list = this.#appConfig.signaturePropertiesList;
     const banner = this.#appConfig.signaturePropertiesBanner;
-    list.replaceChildren();
+    const fragment = document.createDocumentFragment();
 
     if (this.#isLoading) {
       banner.hidden = true;
@@ -351,11 +363,12 @@ class SignaturePropertiesManager {
         li.className = "sigCard";
         for (let j = 0; j < 3; j++) {
           const sk = document.createElement("div");
-          sk.className = "sigCard__skeleton";
+          sk.className = "sigCardSkeleton";
           li.append(sk);
         }
-        list.append(li);
+        fragment.append(li);
       }
+      list.replaceChildren(fragment);
       return;
     }
 
@@ -366,10 +379,7 @@ class SignaturePropertiesManager {
     banner.replaceChildren();
     banner.hidden = false;
     banner.className = `sigBanner ${severity}`;
-    banner.setAttribute(
-      "data-l10n-id",
-      `pdfjs-signature-properties-banner-${worst}`
-    );
+    banner.setAttribute("data-l10n-id", STATUS_INFO[worst].bannerId);
     banner.setAttribute("data-l10n-args", JSON.stringify({ count }));
 
     // Group sub-signatures under their parent.
@@ -377,10 +387,7 @@ class SignaturePropertiesManager {
     const topLevel = [];
     for (const sig of this.#signatures) {
       if (sig.parentId) {
-        if (!byParent.has(sig.parentId)) {
-          byParent.set(sig.parentId, []);
-        }
-        byParent.get(sig.parentId).push(sig);
+        byParent.getOrInsertComputed(sig.parentId, makeArr).push(sig);
       } else {
         topLevel.push(sig);
       }
@@ -393,20 +400,20 @@ class SignaturePropertiesManager {
     const everythingFine = severity === "verified";
 
     for (const sig of topLevel) {
-      list.append(
+      fragment.append(
         this.#renderCard(sig, byParent, /* depth = */ 0, everythingFine)
       );
     }
+    list.replaceChildren(fragment);
   }
 
   #renderCard(sig, byParent, depth, everythingFine) {
     const subs = byParent.get(sig.id) || [];
     const li = document.createElement("li");
-    li.className = "sigCard";
+    li.classList.add("sigCard");
     if (depth === 0 && everythingFine) {
       li.classList.add("sigCard--top-allfine");
     }
-    li.dataset.signatureId = sig.id;
 
     const result = this.#results.get(sig.id);
     const inFlight = this.#pendingVerify.has(sig.id);
@@ -414,25 +421,25 @@ class SignaturePropertiesManager {
     const subjectCN = result?.certificate?.subjectCN;
     if (subjectCN) {
       const signer = document.createElement("div");
-      signer.className = "sigCard__signer";
+      signer.className = "signer";
       signer.textContent = subjectCN;
       li.append(signer);
     }
 
     // Status row.
     const statusRow = document.createElement("div");
-    statusRow.className = `sigCard__row status--${result.status}`;
+    statusRow.classList.add("row", `status--${result.status}`);
     const statusLabel = document.createElement("span");
     statusLabel.setAttribute(
       "data-l10n-id",
-      `pdfjs-signature-properties-status-${result.status}`
+      STATUS_INFO[result.status].statusId
     );
     statusRow.append(statusLabel);
     li.append(statusRow);
 
     if (result.status === "invalid" && result.message) {
       const reason = document.createElement("div");
-      reason.className = "sigCard__detail";
+      reason.className = "detail";
       reason.setAttribute("data-l10n-id", "pdfjs-signature-properties-reason");
       reason.setAttribute(
         "data-l10n-args",
@@ -464,9 +471,9 @@ class SignaturePropertiesManager {
           certKind = "unknown";
       }
     }
-    certRow.className = `sigCard__row cert--${certKind}`;
+    certRow.classList.add("row", `cert--${certKind}`);
     const certLabel = document.createElement("span");
-    let l10nId = `pdfjs-signature-properties-certificate-${certKind}`;
+    let l10nId = CERT_L10N_IDS[certKind];
     let l10nArgs = null;
     if (cert?.issuerCN && certKind === "trusted") {
       l10nArgs = { issuer: cert.issuerCN };
@@ -477,19 +484,13 @@ class SignaturePropertiesManager {
       // browser locale.
       const date = expirationDateForCert(cert);
       if (date) {
-        l10nId = `${l10nId}-with-date`;
+        l10nId = CERT_EXPIRED_WITH_DATE_L10N_ID;
         l10nArgs = { dateObj: date.valueOf() };
       }
     } else if (certKind === "untrusted") {
       const label = untrustedCertLabel(result.errorCode, cert?.issuerCN);
       l10nId = label.id;
       l10nArgs = label.args;
-    } else if (certKind === "revoked") {
-      const reason = shortCertReason(result.errorCode);
-      if (reason) {
-        l10nId = `${l10nId}-with-reason`;
-        l10nArgs = { reason };
-      }
     }
     certLabel.setAttribute("data-l10n-id", l10nId);
     if (l10nArgs) {
@@ -501,20 +502,20 @@ class SignaturePropertiesManager {
 
     if (result.status === "untrusted" && result.message) {
       const detail = document.createElement("div");
-      detail.className = "sigCard__detail";
+      detail.className = "detail";
       detail.textContent = result.message;
       li.append(detail);
     }
     if (result.status === "expired" && result.message) {
       const detail = document.createElement("div");
-      detail.className = "sigCard__detail";
+      detail.className = "detail";
       detail.textContent = result.message;
       li.append(detail);
     }
 
     if (sig.reason) {
       const reason = document.createElement("div");
-      reason.className = "sigCard__detail";
+      reason.className = "detail";
       reason.setAttribute("data-l10n-id", "pdfjs-signature-properties-reason");
       reason.setAttribute(
         "data-l10n-args",
@@ -526,7 +527,7 @@ class SignaturePropertiesManager {
     const signingDate = PDFDateString.toDateObject(sig.signingTime);
     if (signingDate) {
       const ts = document.createElement("div");
-      ts.className = "sigCard__detail";
+      ts.className = "detail";
       ts.setAttribute("data-l10n-id", "pdfjs-signature-properties-timestamp");
       ts.setAttribute(
         "data-l10n-args",
@@ -537,7 +538,7 @@ class SignaturePropertiesManager {
 
     if (cert && typeof this.#verifier?.viewCertificate === "function") {
       const viewCert = document.createElement("button");
-      viewCert.className = "sigCard__viewCert";
+      viewCert.className = "viewCert";
       viewCert.type = "button";
       viewCert.setAttribute(
         "data-l10n-id",
@@ -552,7 +553,7 @@ class SignaturePropertiesManager {
 
     if (subs.length > 0) {
       const subList = document.createElement("ul");
-      subList.className = "signaturePropertiesList sigCard__nested";
+      subList.classList.add("signaturePropertiesList", "nested");
       for (const sub of subs) {
         subList.append(
           this.#renderCard(sub, byParent, depth + 1, everythingFine)
@@ -564,7 +565,7 @@ class SignaturePropertiesManager {
         // signatures are always rendered inline; the nested border + indent
         // already shows the parent→child relationship.
         const details = document.createElement("details");
-        details.className = "sigCard__subSignatures";
+        details.className = "subSignatures";
         details.open = true;
         const summary = document.createElement("summary");
         summary.setAttribute(
@@ -585,7 +586,7 @@ class SignaturePropertiesManager {
 
     if (inFlight) {
       const sk = document.createElement("div");
-      sk.className = "sigCard__skeleton";
+      sk.className = "sigCardSkeleton";
       li.append(sk);
     }
 
@@ -617,7 +618,6 @@ class SignaturePropertiesManager {
     } catch (ex) {
       console.warn("signature verify failed:", ex);
       result = {
-        signatureId: signature.id,
         status: "unknown",
         errorCode: "BRIDGE_ERROR",
         message: ex?.message ?? null,
@@ -654,7 +654,7 @@ class SignaturePropertiesManager {
       if (!r) {
         continue;
       }
-      if (STATUS_PRIORITY[r.status] > STATUS_PRIORITY[worst]) {
+      if (STATUS_INFO[r.status].priority > STATUS_INFO[worst].priority) {
         worst = r.status;
       }
     }

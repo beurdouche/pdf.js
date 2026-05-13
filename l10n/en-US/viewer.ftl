@@ -804,8 +804,8 @@ pdfjs-signature-properties-button-label = Digital Signature properties
 pdfjs-signature-properties-banner-verified = Document has a valid digital signature
 pdfjs-signature-properties-banner-unknown =
     { $count ->
-        [one] Document signed but { $count } signature could not be verified
-       *[other] Document signed but { $count } signatures could not be verified
+        [one] Document signed but { $count } digital signature could not be verified
+       *[other] Document signed but { $count } digital signatures could not be verified
     }
 pdfjs-signature-properties-banner-untrusted =
     { $count ->
@@ -819,8 +819,8 @@ pdfjs-signature-properties-banner-expired =
     }
 pdfjs-signature-properties-banner-invalid =
     { $count ->
-        [one] Document has { $count } invalid signature
-       *[other] Document has { $count } invalid signatures
+        [one] Document has { $count } invalid digital signature
+       *[other] Document has { $count } invalid digital signatures
     }
 pdfjs-signature-properties-banner-revoked =
     { $count ->
@@ -837,26 +837,22 @@ pdfjs-signature-properties-status-expired = Status: Signature verified
 pdfjs-signature-properties-status-invalid = Status: Signature invalid
 pdfjs-signature-properties-status-revoked = Status: Signature verified
 
-## Per-signature certificate row. The "with-…" variants embed extra
-## context inside the parentheses.
+## Per-signature certificate row. The variants with an issuer / date in
+## parentheses embed fully-localized context — no English fall-through.
 ##
 ## Variables:
 ##   $issuer (String) - issuer or subject common name from the cert.
-##   $reason (String) - one-word reason for the failure (e.g.
-##                      "revoked", "self-signed").
 ##   $dateObj (Date)  - notAfter date for the expired-with-date form.
 
 pdfjs-signature-properties-certificate-trusted = Certificate: Trusted ({ $issuer })
 pdfjs-signature-properties-certificate-unknown = Certificate: Unavailable
 pdfjs-signature-properties-certificate-untrusted = Certificate: Untrusted
-pdfjs-signature-properties-certificate-untrusted-with-reason = Certificate: Untrusted ({ $reason })
 pdfjs-signature-properties-certificate-untrusted-unknown-issuer = Certificate: Unknown issuer ({ $issuer })
 pdfjs-signature-properties-certificate-untrusted-self-signed = Certificate: Self-signed ({ $issuer })
 pdfjs-signature-properties-certificate-untrusted-untrusted-issuer = Certificate: Untrusted issuer ({ $issuer })
 pdfjs-signature-properties-certificate-expired = Certificate: Expired
 pdfjs-signature-properties-certificate-expired-with-date = Certificate: Expired ({ DATETIME($dateObj, dateStyle: "medium") })
 pdfjs-signature-properties-certificate-revoked = Certificate: Revoked
-pdfjs-signature-properties-certificate-revoked-with-reason = Certificate: Revoked ({ $reason })
 
 ##
 

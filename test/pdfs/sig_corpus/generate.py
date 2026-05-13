@@ -21,9 +21,13 @@ Run from the pdf.js root:
 
     python3 test/pdfs/sig_corpus/generate.py
 
-Requires a built mozilla-central checkout at /opt/mozilla/firefox so we
-can call its bundled pycms.py / pycert.py / pykey.py and reuse the
-vendored Python deps under third_party/python.
+Requires a built mozilla-central checkout so we can call its bundled
+pycms.py / pycert.py / pykey.py and reuse the vendored Python deps under
+third_party/python. The checkout location is resolved in this order:
+
+  1. The --mozilla-central CLI flag (highest priority).
+  2. The MOZILLA_CENTRAL_SRC environment variable.
+  3. /opt/mozilla/firefox (fallback default; will print a warning).
 """
 
 import argparse
@@ -36,9 +40,27 @@ import sys
 from pathlib import Path
 
 CORPUS_DIR = Path(__file__).resolve().parent
-FIREFOX_DIR = Path("/opt/mozilla/firefox")
+
+# Default location, used only when no CLI flag or env var overrides it.
+# Patched at runtime in main() once the path is resolved.
+DEFAULT_MOZILLA_CENTRAL_DIR = Path("/opt/mozilla/firefox")
+FIREFOX_DIR = DEFAULT_MOZILLA_CENTRAL_DIR
 TOOLS_DIR = FIREFOX_DIR / "security/manager/tools"
 PYCMS = TOOLS_DIR / "pycms.py"
+
+
+def _resolve_mozilla_central_dir(cli_value):
+    """CLI flag → MOZILLA_CENTRAL_SRC env var → default."""
+    if cli_value:
+        return Path(cli_value).expanduser().resolve()
+    env = os.environ.get("MOZILLA_CENTRAL_SRC")
+    if env:
+        return Path(env).expanduser().resolve()
+    sys.stderr.write(
+        f"warning: no --mozilla-central / MOZILLA_CENTRAL_SRC set, "
+        f"falling back to {DEFAULT_MOZILLA_CENTRAL_DIR}\n"
+    )
+    return DEFAULT_MOZILLA_CENTRAL_DIR
 
 # Vendored Python modules pycms transitively imports.
 VENDORED_DEPS = ["ecdsa", "rsa", "pyasn1", "pyasn1_modules", "six"]
@@ -709,11 +731,29 @@ def main():
         default=CORPUS_DIR,
         help="Output directory (default: this script's directory).",
     )
+    parser.add_argument(
+        "--mozilla-central",
+        type=Path,
+        default=None,
+        help=(
+            "Path to a built mozilla-central checkout. Defaults to the "
+            "MOZILLA_CENTRAL_SRC env var, then /opt/mozilla/firefox."
+        ),
+    )
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
+    global FIREFOX_DIR, TOOLS_DIR, PYCMS
+    FIREFOX_DIR = _resolve_mozilla_central_dir(args.mozilla_central)
+    TOOLS_DIR = FIREFOX_DIR / "security/manager/tools"
+    PYCMS = TOOLS_DIR / "pycms.py"
+
     if not PYCMS.exists():
-        raise SystemExit(f"pycms.py not found at {PYCMS}")
+        raise SystemExit(
+            f"pycms.py not found at {PYCMS}\n"
+            f"Pass --mozilla-central </path/to/mozilla-central> or set the "
+            f"MOZILLA_CENTRAL_SRC environment variable."
+        )
 
     for case in CASES:
         pdf = _build_single(case)

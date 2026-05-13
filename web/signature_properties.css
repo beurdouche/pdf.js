@@ -20,6 +20,51 @@
  * overall verification state.
  */
 
+:root {
+  --sig-card-border: light-dark(rgb(228 228 232), rgb(82 82 86));
+  --sig-card-bg: var(--field-bg-color, light-dark(white, rgb(64 64 68)));
+  --sig-card-nested-bg: light-dark(rgb(252 252 253), rgb(72 72 76));
+  --sig-row-color: light-dark(rgb(58 58 60), rgb(228 228 232));
+  --sig-row-icon-default-bg: rgb(150 150 150);
+  --sig-detail-color: light-dark(rgb(96 96 96), rgb(180 180 184));
+  --sig-divider-color: light-dark(rgb(228 228 232), rgb(82 82 86));
+  --sig-summary-hover-color: light-dark(rgb(28 67 138), rgb(126 169 255));
+  --sig-link-color: light-dark(rgb(28 113 216), rgb(126 169 255));
+  --sig-link-hover-bg: light-dark(
+    rgb(28 113 216 / 0.1),
+    rgb(126 169 255 / 0.15)
+  );
+  --sig-banner-verified-bg: light-dark(rgb(228 247 235), rgb(28 84 49));
+  --sig-banner-verified-color: light-dark(rgb(16 92 47), rgb(176 232 196));
+  --sig-banner-warn-bg: light-dark(rgb(255 247 217), rgb(95 67 9));
+  --sig-banner-warn-color: light-dark(rgb(124 84 9), rgb(255 222 153));
+  --sig-banner-error-bg: light-dark(rgb(254 226 235), rgb(122 21 51));
+  --sig-banner-error-color: light-dark(rgb(167 26 70), rgb(255 188 207));
+  --sig-skeleton-base: light-dark(rgb(238 238 238), rgb(72 72 76));
+  --sig-skeleton-mid: light-dark(rgb(248 248 248), rgb(92 92 96));
+
+  @media screen and (forced-colors: active) {
+    --sig-card-border: CanvasText;
+    --sig-card-bg: Canvas;
+    --sig-card-nested-bg: Canvas;
+    --sig-row-color: CanvasText;
+    --sig-row-icon-default-bg: GrayText;
+    --sig-detail-color: GrayText;
+    --sig-divider-color: GrayText;
+    --sig-summary-hover-color: Highlight;
+    --sig-link-color: LinkText;
+    --sig-link-hover-bg: transparent;
+    --sig-banner-verified-bg: Canvas;
+    --sig-banner-verified-color: CanvasText;
+    --sig-banner-warn-bg: Canvas;
+    --sig-banner-warn-color: CanvasText;
+    --sig-banner-error-bg: Canvas;
+    --sig-banner-error-color: CanvasText;
+    --sig-skeleton-base: Canvas;
+    --sig-skeleton-mid: Canvas;
+  }
+}
+
 #signaturePropertiesButton {
   /* Default (no state class yet): use the regular signature icon. */
   &::before {
@@ -50,89 +95,44 @@
     background-image: var(--toolbarButton-signaturePropertiesError-icon);
   }
 
-  /* Loading state: three dots that pulse in sequence. We replace the
-   * icon with dots drawn via CSS so it animates without touching the
-   * SVG layer. */
-  &.state-loading::before {
-    mask-image: none;
-    background-color: transparent;
-    display: inline-flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 18px;
-    height: var(--icon-size);
-    padding: 0 1px;
-    box-sizing: border-box;
-    opacity: 1;
-    content: "";
-    background-repeat: no-repeat;
-    background-size:
-      6px 16px,
-      6px 16px,
-      6px 16px;
-    background-position:
-      0 0,
-      6px 0,
-      12px 0;
-    color: var(--toolbar-icon-bg-color);
-    animation: signaturePropertiesDots 1.2s linear infinite;
+  /* Loading state: three .loadingDot spans pulse in sequence via
+   * `animation-delay`. The spans are injected once at construction (see
+   * SignaturePropertiesManager) and are width/height 0 by default thanks
+   * to the `.toolbarButton > span` rule — they only become visible when
+   * this `state-loading` modifier is set. */
+  &.state-loading {
+    &::before {
+      display: none;
+    }
+    .loadingDot {
+      display: inline-block;
+      width: 4px;
+      height: 4px;
+      margin: 0 1px;
+      border-radius: 50%;
+      background: var(--toolbar-icon-bg-color);
+      animation: signaturePropertiesDot 1.2s ease-in-out infinite both;
+
+      &:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+      &:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+    }
   }
 }
 
-@keyframes signaturePropertiesDots {
-  0% {
-    background-image:
-      radial-gradient(
-        circle 2px at 3px 8px,
-        currentcolor 95%,
-        transparent 100%
-      ),
-      radial-gradient(
-        circle 2px at 9px 8px,
-        color-mix(in srgb, currentcolor 35%, transparent) 95%,
-        transparent 100%
-      ),
-      radial-gradient(
-        circle 2px at 15px 8px,
-        color-mix(in srgb, currentcolor 35%, transparent) 95%,
-        transparent 100%
-      );
+@keyframes signaturePropertiesDot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.85);
   }
-  33% {
-    background-image:
-      radial-gradient(
-        circle 2px at 3px 8px,
-        color-mix(in srgb, currentcolor 35%, transparent) 95%,
-        transparent 100%
-      ),
-      radial-gradient(
-        circle 2px at 9px 8px,
-        currentcolor 95%,
-        transparent 100%
-      ),
-      radial-gradient(
-        circle 2px at 15px 8px,
-        color-mix(in srgb, currentcolor 35%, transparent) 95%,
-        transparent 100%
-      );
-  }
-  66% {
-    background-image:
-      radial-gradient(
-        circle 2px at 3px 8px,
-        color-mix(in srgb, currentcolor 35%, transparent) 95%,
-        transparent 100%
-      ),
-      radial-gradient(
-        circle 2px at 9px 8px,
-        color-mix(in srgb, currentcolor 35%, transparent) 95%,
-        transparent 100%
-      ),
-      radial-gradient(
-        circle 2px at 15px 8px,
-        currentcolor 95%,
-        transparent 100%
-      );
+  40% {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -160,16 +160,16 @@
   border-inline-start: 3px solid currentcolor;
 
   &.verified {
-    background: rgb(228 247 235);
-    color: rgb(16 92 47);
+    background: var(--sig-banner-verified-bg);
+    color: var(--sig-banner-verified-color);
   }
   &.warn {
-    background: rgb(255 247 217);
-    color: rgb(124 84 9);
+    background: var(--sig-banner-warn-bg);
+    color: var(--sig-banner-warn-color);
   }
   &.error {
-    background: rgb(254 226 235);
-    color: rgb(167 26 70);
+    background: var(--sig-banner-error-bg);
+    color: var(--sig-banner-error-color);
   }
 }
 
@@ -184,190 +184,192 @@
 }
 
 .sigCard {
-  border: 1px solid rgb(228 228 232);
+  border: 1px solid var(--sig-card-border);
   border-radius: 6px;
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  background: var(--field-bg-color, white);
-}
+  background: var(--sig-card-bg);
 
-.sigCard__signer {
-  font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 0.1px;
-  margin-bottom: 1px;
-}
-
-.sigCard__row {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 2px 6px;
-  /* Icon aligns to the first line of multi-line text, not the centre
-   * of the wrapped block. */
-  align-items: flex-start;
-  font-size: 12px;
-  color: rgb(58 58 60);
-  min-height: 18px;
-
-  > span {
-    flex: 1 1 auto;
-    /* Allow the span to shrink below its intrinsic min-content width
-     * so long text wraps inside the row instead of pushing the whole
-     * label below the icon. */
-    min-width: 0;
-    overflow-wrap: break-word;
+  .signer {
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.1px;
+    margin-bottom: 1px;
   }
 
-  &::before {
-    content: "";
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    border-radius: 50%;
-    /* Keep the icon at the same vertical rhythm as a single line of
-     * text so it visually pairs with the first row of the wrapped
-     * label. */
-    margin-top: 1px;
-    background: rgb(150 150 150) center / 10px no-repeat;
-  }
-
-  /* Default "everything-OK" check is grey: the signature crypto
-   * verified, but we don't want a strong green endorsement just
-   * because one row is fine. */
-  &.status--verified::before,
-  &.status--untrusted::before,
-  &.status--expired::before,
-  &.status--revoked::before,
-  &.cert--trusted::before {
-    background-color: transparent;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='white' stroke='%23969696' stroke-width='1'/><path fill='none' stroke='%23969696' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M5 8.4l2.4 2.4L11.6 6'/></svg>");
-    background-size: contain;
-  }
-  &.cert--untrusted::before,
-  &.cert--expired::before {
-    background-color: transparent;
-    background-image: var(--toolbarButton-signaturePropertiesWarn-icon);
-    background-size: contain;
-  }
-  &.cert--revoked::before,
-  &.status--invalid::before,
-  &.status--unknown::before,
-  &.cert--unknown::before {
-    background-color: transparent;
-    background-image: var(--toolbarButton-signaturePropertiesError-icon);
-    background-size: contain;
-  }
-}
-
-/* Promote to a real green tick only on the top-level card AND only when
- * every signature in the document is verified. The .sigCard--top-allfine
- * class is set in #render. */
-.sigCard--top-allfine > .sigCard__row.status--verified::before,
-.sigCard--top-allfine > .sigCard__row.cert--trusted::before {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%231d8e3d'/><path fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M4.5 8.4l2.4 2.4L11.6 6'/></svg>");
-}
-
-.sigCard__detail {
-  font-size: 11.5px;
-  color: rgb(96 96 96);
-  margin-inline-start: 20px;
-  line-height: 1.35;
-}
-
-.sigCard__viewCert {
-  align-self: center;
-  margin-top: 4px;
-  color: rgb(28 113 216);
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 2px 4px;
-  border-radius: 4px;
-  white-space: nowrap;
-
-  &:hover {
-    background: rgb(28 113 216 / 0.1);
-    text-decoration: underline;
-  }
-  &:focus-visible {
-    outline: 2px solid rgb(28 113 216);
-    outline-offset: 1px;
-  }
-}
-
-.sigCard__subSignatures {
-  margin-top: 4px;
-  border-top: 1px dashed rgb(228 228 232);
-  padding-top: 4px;
-  font-size: 12px;
-
-  > summary {
-    cursor: pointer;
-    user-select: none;
-    list-style: none;
-    color: rgb(96 96 96);
+  .row {
     display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 0;
+    flex-wrap: nowrap;
+    gap: 2px 6px;
+    /* Icon aligns to the first line of multi-line text, not the centre
+     * of the wrapped block. */
+    align-items: flex-start;
+    font-size: 12px;
+    color: var(--sig-row-color);
+    min-height: 18px;
 
-    &:hover {
-      color: rgb(28 67 138);
+    > span {
+      flex: 1 1 auto;
+      /* Allow the span to shrink below its intrinsic min-content width
+       * so long text wraps inside the row instead of pushing the whole
+       * label below the icon. */
+      min-width: 0;
+      overflow-wrap: break-word;
     }
-    &::-webkit-details-marker {
-      display: none;
-    }
+
     &::before {
       content: "";
       display: inline-block;
-      width: 0;
-      height: 0;
-      border-top: 4px solid transparent;
-      border-bottom: 4px solid transparent;
-      border-inline-start: 5px solid currentcolor;
-      transition: transform 0.15s;
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      /* Keep the icon at the same vertical rhythm as a single line of
+       * text so it visually pairs with the first row of the wrapped
+       * label. */
+      margin-top: 1px;
+      background: var(--sig-row-icon-default-bg) center / 10px no-repeat;
+    }
+
+    /* Default "everything-OK" check is grey: the signature crypto
+     * verified, but we don't want a strong green endorsement just
+     * because one row is fine. */
+    &.status--verified::before,
+    &.status--untrusted::before,
+    &.status--expired::before,
+    &.status--revoked::before,
+    &.cert--trusted::before {
+      background-color: transparent;
+      background-image: var(--signatureProperties-statusCheck-icon);
+      background-size: contain;
+    }
+    &.cert--untrusted::before,
+    &.cert--expired::before {
+      background-color: transparent;
+      background-image: var(--toolbarButton-signaturePropertiesWarn-icon);
+      background-size: contain;
+    }
+    &.cert--revoked::before,
+    &.status--invalid::before,
+    &.status--unknown::before,
+    &.cert--unknown::before {
+      background-color: transparent;
+      background-image: var(--toolbarButton-signaturePropertiesError-icon);
+      background-size: contain;
     }
   }
-  &[open] > summary::before {
-    transform: rotate(90deg);
+
+  /* Promote to a real green tick only on the top-level card AND only when
+   * every signature in the document is verified. The
+   * `.sigCard--top-allfine` modifier is set in #render. The toolbar
+   * button's verified icon is reused so the panel matches the badge. */
+  &.sigCard--top-allfine > .row.status--verified::before,
+  &.sigCard--top-allfine > .row.cert--trusted::before {
+    background-image: var(--toolbarButton-signaturePropertiesVerified-icon);
+  }
+
+  .detail {
+    font-size: 11.5px;
+    color: var(--sig-detail-color);
+    margin-inline-start: 20px;
+    line-height: 1.35;
+  }
+
+  .viewCert {
+    align-self: center;
+    margin-top: 4px;
+    color: var(--sig-link-color);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    white-space: nowrap;
+
+    &:hover {
+      background: var(--sig-link-hover-bg);
+      text-decoration: underline;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--sig-link-color);
+      outline-offset: 1px;
+    }
+  }
+
+  .subSignatures {
+    margin-top: 4px;
+    border-top: 1px dashed var(--sig-divider-color);
+    padding-top: 4px;
+    font-size: 12px;
+
+    > summary {
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      color: var(--sig-detail-color);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 0;
+
+      &:hover {
+        color: var(--sig-summary-hover-color);
+      }
+      &::-webkit-details-marker {
+        display: none;
+      }
+      &::before {
+        content: "";
+        display: inline-block;
+        width: 0;
+        height: 0;
+        border-top: 4px solid transparent;
+        border-bottom: 4px solid transparent;
+        border-inline-start: 5px solid currentcolor;
+        transition: transform 0.15s;
+      }
+    }
+    &[open] > summary::before {
+      transform: rotate(90deg);
+    }
+  }
+
+  .nested,
+  .subSignatures > .signaturePropertiesList {
+    padding: 4px 0 2px;
+    margin-inline-start: 0;
+    gap: 4px;
+  }
+
+  .nested {
+    margin-top: 4px;
+  }
+
+  /* Cosmetics for cards nested inside another (sub-)signature. */
+  .subSignatures .sigCard,
+  .nested .sigCard {
+    padding: 6px 8px;
+    background: var(--sig-card-nested-bg);
+    gap: 2px;
+  }
+
+  .subSignatures .signer,
+  .nested .signer {
+    font-size: 12px;
+    font-weight: 500;
   }
 }
 
-.sigCard__nested,
-.sigCard__subSignatures > .signaturePropertiesList {
-  padding: 4px 0 2px;
-  margin-inline-start: 0;
-  gap: 4px;
-}
-
-.sigCard__nested {
-  margin-top: 4px;
-}
-
-.sigCard__subSignatures .sigCard,
-.sigCard__nested .sigCard {
-  padding: 6px 8px;
-  background: rgb(252 252 253);
-  gap: 2px;
-}
-
-.sigCard__subSignatures .sigCard__signer,
-.sigCard__nested .sigCard__signer {
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.sigCard__skeleton {
+.sigCardSkeleton {
   height: 14px;
   background: linear-gradient(
     90deg,
-    rgb(238 238 238) 0%,
-    rgb(248 248 248) 50%,
-    rgb(238 238 238) 100%
+    var(--sig-skeleton-base) 0%,
+    var(--sig-skeleton-mid) 50%,
+    var(--sig-skeleton-base) 100%
   );
   border-radius: 4px;
   animation: sigSkeleton 1.2s infinite;

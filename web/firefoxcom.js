@@ -539,10 +539,15 @@ const NSS_ERR_CODES = {
     "MOZILLA_PKIX_ERROR_NOT_YET_VALID_CERTIFICATE",
     "MOZILLA_PKIX_ERROR_NOT_YET_VALID_ISSUER_CERTIFICATE",
   ]),
+  // Only definite-revoked codes belong here. We intentionally do NOT
+  // include OCSP-response-missing-style codes (e.g.
+  // MOZILLA_PKIX_ERROR_OCSP_RESPONSE_FOR_CERT_MISSING), since those
+  // mean "we couldn't reach the responder" — they fall through to the
+  // generic untrusted bucket.
   REVOKED: new Set([
     "SEC_ERROR_REVOKED_CERTIFICATE",
     "SEC_ERROR_REVOKED_KEY",
-    "MOZILLA_PKIX_ERROR_OCSP_RESPONSE_FOR_CERT_MISSING",
+    "MOZILLA_PKIX_ERROR_REVOKED_CERTIFICATE",
   ]),
   UNTRUSTED: new Set([
     "SEC_ERROR_UNKNOWN_ISSUER",
@@ -580,7 +585,6 @@ class SignatureVerifier {
   async verify(signature) {
     if (signature.signatureType === null) {
       return {
-        signatureId: signature.id,
         status: "unknown",
         errorCode: "SUBFILTER_NOT_SUPPORTED",
         message: signature.subFilter,
@@ -598,7 +602,6 @@ class SignatureVerifier {
       });
     } catch (ex) {
       return {
-        signatureId: signature.id,
         status: "unknown",
         errorCode: "BRIDGE_ERROR",
         message: ex?.message ?? null,
@@ -608,7 +611,6 @@ class SignatureVerifier {
     }
     if (!response || response.error) {
       return {
-        signatureId: signature.id,
         status: "unknown",
         errorCode: response?.error ?? "EMPTY_RESPONSE",
         message: null,
@@ -622,7 +624,6 @@ class SignatureVerifier {
     const entry = Array.isArray(response) ? response[0] : response;
     if (!entry) {
       return {
-        signatureId: signature.id,
         status: "unknown",
         errorCode: "EMPTY_RESPONSE",
         message: null,
@@ -635,7 +636,6 @@ class SignatureVerifier {
       entry.certificateResult
     );
     return {
-      signatureId: signature.id,
       status,
       errorCode,
       message: entry.message ?? null,
