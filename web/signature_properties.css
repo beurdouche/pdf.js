@@ -25,7 +25,6 @@
   --sig-card-bg: var(--field-bg-color, light-dark(white, rgb(64 64 68)));
   --sig-card-nested-bg: light-dark(rgb(252 252 253), rgb(72 72 76));
   --sig-row-color: light-dark(rgb(58 58 60), rgb(228 228 232));
-  --sig-row-icon-default-bg: rgb(150 150 150);
   --sig-detail-color: light-dark(rgb(96 96 96), rgb(180 180 184));
   --sig-divider-color: light-dark(rgb(228 228 232), rgb(82 82 86));
   --sig-summary-hover-color: light-dark(rgb(28 67 138), rgb(126 169 255));
@@ -43,12 +42,23 @@
   --sig-skeleton-base: light-dark(rgb(238 238 238), rgb(72 72 76));
   --sig-skeleton-mid: light-dark(rgb(248 248 248), rgb(92 92 96));
 
+  /* Tint colours for the row / toolbar icons. These are paired with
+   * `mask-image` so the icons recolour for light/dark/HCM. The four
+   * semantics map to: default = grey (signature crypto verified but
+   * not endorsed), warn = orange (cert trust/validity issue),
+   * error = red (signature itself failed or could not be checked),
+   * verified = green (only used for the top-level "everything fine"
+   * row and the toolbar's verified badge). */
+  --sig-icon-default: light-dark(rgb(150 150 150), rgb(180 180 184));
+  --sig-icon-warn: light-dark(rgb(217 142 27), rgb(255 178 77));
+  --sig-icon-error: light-dark(rgb(196 31 71), rgb(255 117 145));
+  --sig-icon-verified: light-dark(rgb(29 142 61), rgb(106 210 126));
+
   @media screen and (forced-colors: active) {
     --sig-card-border: CanvasText;
     --sig-card-bg: Canvas;
     --sig-card-nested-bg: Canvas;
     --sig-row-color: CanvasText;
-    --sig-row-icon-default-bg: GrayText;
     --sig-detail-color: GrayText;
     --sig-divider-color: GrayText;
     --sig-summary-hover-color: Highlight;
@@ -62,6 +72,13 @@
     --sig-banner-error-color: CanvasText;
     --sig-skeleton-base: Canvas;
     --sig-skeleton-mid: Canvas;
+    /* HCM doesn't allow custom colours; collapse the four icon tints
+     * to CanvasText. The glyph shape (check / `!` / `✕`) still
+     * differentiates the icons. */
+    --sig-icon-default: CanvasText;
+    --sig-icon-warn: CanvasText;
+    --sig-icon-error: CanvasText;
+    --sig-icon-verified: CanvasText;
   }
 }
 
@@ -71,28 +88,25 @@
     mask-image: var(--toolbarButton-editorSignature-icon);
   }
 
-  /* When a verification state is set, switch to a full-color SVG. The
-   * base .toolbarButton::before still applies width / height, but the
-   * mask is cleared and background-color goes transparent so the
-   * SVG's own colours show. */
+  /* When a verification state is set, switch the mask to the matching
+   * state badge and tint via background-color so the badge inherits
+   * light/dark/HCM via the `--sig-icon-*` vars. */
   &.state-verified::before,
   &.state-warn::before,
   &.state-error::before {
-    mask-image: none;
-    background-color: transparent;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: contain;
     opacity: 1;
   }
   &.state-verified::before {
-    background-image: var(--toolbarButton-signaturePropertiesVerified-icon);
+    mask-image: var(--toolbarButton-signaturePropertiesVerified-icon);
+    background-color: var(--sig-icon-verified);
   }
   &.state-warn::before {
-    background-image: var(--toolbarButton-signaturePropertiesWarn-icon);
+    mask-image: var(--toolbarButton-signaturePropertiesWarn-icon);
+    background-color: var(--sig-icon-warn);
   }
   &.state-error::before {
-    background-image: var(--toolbarButton-signaturePropertiesError-icon);
+    mask-image: var(--toolbarButton-signaturePropertiesError-icon);
+    background-color: var(--sig-icon-error);
   }
 
   /* Loading state: three .loadingDot spans pulse in sequence via
@@ -225,49 +239,52 @@
       width: 14px;
       height: 14px;
       flex-shrink: 0;
-      border-radius: 50%;
       /* Keep the icon at the same vertical rhythm as a single line of
        * text so it visually pairs with the first row of the wrapped
        * label. */
       margin-top: 1px;
-      background: var(--sig-row-icon-default-bg) center / 10px no-repeat;
+      /* The icon shape is a mask-image; the tint comes from
+       * `background-color`, which lets every row icon adapt to
+       * light/dark/HCM via the `--sig-icon-*` vars in `:root`. */
+      mask-position: center;
+      mask-repeat: no-repeat;
+      mask-size: contain;
+      mask-image: var(--signatureProperties-rowCheck-icon);
+      background-color: var(--sig-icon-default);
     }
 
-    /* Default "everything-OK" check is grey: the signature crypto
-     * verified, but we don't want a strong green endorsement just
-     * because one row is fine. */
+    /* "Everything-OK" rows (signature crypto verified, even if the
+     * cert chain is untrusted/expired/etc.) and the trusted-cert row
+     * keep the muted grey check. */
     &.status--verified::before,
     &.status--untrusted::before,
     &.status--expired::before,
     &.status--revoked::before,
     &.cert--trusted::before {
-      background-color: transparent;
-      background-image: var(--signatureProperties-statusCheck-icon);
-      background-size: contain;
+      mask-image: var(--signatureProperties-rowCheck-icon);
+      background-color: var(--sig-icon-default);
     }
     &.cert--untrusted::before,
     &.cert--expired::before {
-      background-color: transparent;
-      background-image: var(--toolbarButton-signaturePropertiesWarn-icon);
-      background-size: contain;
+      mask-image: var(--toolbarButton-signaturePropertiesWarn-icon);
+      background-color: var(--sig-icon-warn);
     }
     &.cert--revoked::before,
     &.status--invalid::before,
     &.status--unknown::before,
     &.cert--unknown::before {
-      background-color: transparent;
-      background-image: var(--toolbarButton-signaturePropertiesError-icon);
-      background-size: contain;
+      mask-image: var(--toolbarButton-signaturePropertiesError-icon);
+      background-color: var(--sig-icon-error);
     }
   }
 
-  /* Promote to a real green tick only on the top-level card AND only when
-   * every signature in the document is verified. The
-   * `.sigCard--top-allfine` modifier is set in #render. The toolbar
-   * button's verified icon is reused so the panel matches the badge. */
+  /* Promote to a real green tick only on the top-level card AND only
+   * when every signature in the document is verified. The
+   * `.sigCard--top-allfine` modifier is set in #render. */
   &.sigCard--top-allfine > .row.status--verified::before,
   &.sigCard--top-allfine > .row.cert--trusted::before {
-    background-image: var(--toolbarButton-signaturePropertiesVerified-icon);
+    mask-image: var(--toolbarButton-signaturePropertiesVerified-icon);
+    background-color: var(--sig-icon-verified);
   }
 
   .detail {
