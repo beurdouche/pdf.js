@@ -320,7 +320,8 @@
       background-color: var(--sig-icon-default);
     }
     &.cert--untrusted::before,
-    &.cert--expired::before {
+    &.cert--expired::before,
+    &.coverage--partial::before {
       mask-image: var(--toolbarButton-signaturePropertiesError-icon);
       background-color: var(--sig-icon-warn);
     }

@@ -2219,6 +2219,26 @@ describe("api", function () {
       await loadingTask.destroy();
     });
 
+    it("gets signature coverage for a document modified after signing (issue 21698)", async function () {
+      const loadingTask = getDocument(buildGetDocumentParams("issue21698.pdf"));
+      const pdfDoc = await loadingTask.promise;
+      const signatures = await pdfDoc.getSignatures();
+
+      expect(signatures.length).toEqual(1);
+      const [signature] = signatures;
+      // Nothing else signed this document, so the shortfall below means
+      // unsigned changes rather than an earlier revision of a multi-signed
+      // document (compare the `parentId`-bearing signature above).
+      expect(signature.parentId).toBeNull();
+      expect(signature.byteRange).toEqual([0, 5646, 25648, 345]);
+      // Signed by `pdfsig`, then a text field was edited in Acrobat, which
+      // saved the change as an appended incremental update.
+      expect(signature.modificationsAfterSignature).toEqual(1);
+      expect(signature.coversWholeDocument).toBeFalse();
+
+      await loadingTask.destroy();
+    });
+
     it("gets signature metadata without fetching later revisions", async function () {
       const baseData = await DefaultFileReaderFactory.fetch({
         path: TEST_PDFS_PATH + "signed_verified.pdf",

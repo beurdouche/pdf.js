@@ -80,6 +80,13 @@ const CERT_L10N_IDS = {
 const CERT_EXPIRED_WITH_DATE_L10N_ID =
   "pdfjs-digital-signature-properties-certificate-expired-with-date";
 
+// Shown instead of the per-status banner when the signatures verified but
+// the document contains content none of them covers, and on the card of
+// the top-level signature that falls short.
+const BANNER_MODIFIED = "pdfjs-digital-signature-properties-banner-modified";
+const COVERAGE_PARTIAL_L10N_ID =
+  "pdfjs-digital-signature-properties-coverage-partial";
+
 // For an `untrusted` certificate, pick the most specific Fluent label.
 // When the error code matches one of the recognised cases we have a
 // structured "Certificate: <reason> (<issuer>)" string; otherwise we
@@ -269,8 +276,6 @@ class SignaturePropertiesManager {
         errorCode: null,
         message: null,
         certificate: null,
-        documentModifiedAfterSigning: !sig.coversWholeDocument,
-        modificationsAfterSignature: sig.modificationsAfterSignature,
       });
     }
     this.#render();
@@ -355,9 +360,26 @@ class SignaturePropertiesManager {
     return worst;
   }
 
+  // Whether the document contains content that no signature covers —
+  // typically an incremental update appended after signing.
+  //
+  // Only *top-level* signatures are consulted. Every inner signature in a
+  // legitimately multi-signed document stops short of the file end, since
+  // later revisions were appended on top of it; flagging those would fire
+  // on every multi-signature PDF. A top-level signature (`parentId ===
+  // null`) is the revision that's supposed to cover the current document
+  // state, so it falling short is what actually means "unsigned changes".
+  get #hasUnsignedChanges() {
+    return this.#signatures.some(s => !s.parentId && !s.coversWholeDocument);
+  }
+
   get #bannerState() {
     if (this.#results.size === 0) {
-      return { worst: "unknown", severity: "error", count: 0 };
+      return {
+        severity: "error",
+        bannerId: STATUS_INFO.unknown.bannerId,
+        count: 0,
+      };
     }
     const worst = this.#worst;
     let count = 0;
@@ -368,7 +390,18 @@ class SignaturePropertiesManager {
         count++;
       }
     }
-    return { worst, severity: STATUS_INFO[worst].severity, count };
+    let { severity, bannerId } = STATUS_INFO[worst];
+    // Unsigned changes must never *hide* a verification failure, so only
+    // take over the headline when the signatures themselves are fine —
+    // which is exactly the misleading case: a valid signature that says
+    // nothing about the content appended after it. When something did
+    // fail, its more specific banner wins and the per-signature coverage
+    // row still reports the unsigned changes.
+    if (severity === "verified" && this.#hasUnsignedChanges) {
+      severity = "warn";
+      bannerId = BANNER_MODIFIED;
+    }
+    return { severity, bannerId, count };
   }
 
   #render() {
@@ -393,11 +426,11 @@ class SignaturePropertiesManager {
     }
 
     // Banner.
-    const { worst, severity, count } = this.#bannerState;
+    const { severity, bannerId, count } = this.#bannerState;
     banner.replaceChildren();
     banner.hidden = false;
     banner.className = `sigBanner ${severity}`;
-    banner.setAttribute("data-l10n-id", STATUS_INFO[worst].bannerId);
+    banner.setAttribute("data-l10n-id", bannerId);
     banner.setAttribute("data-l10n-args", JSON.stringify({ count }));
 
     // Group sub-signatures under their parent.
@@ -521,6 +554,17 @@ class SignaturePropertiesManager {
       }
       certRow.append(certLabel);
       li.append(certRow);
+    }
+
+    // Coverage row — only for a top-level signature, since inner ones
+    // always stop short of the file end by design (see `#hasUnsignedChanges`).
+    if (depth === 0 && !sig.coversWholeDocument) {
+      const coverageRow = document.createElement("div");
+      coverageRow.classList.add("row", "coverage--partial");
+      const coverageLabel = document.createElement("span");
+      coverageLabel.setAttribute("data-l10n-id", COVERAGE_PARTIAL_L10N_ID);
+      coverageRow.append(coverageLabel);
+      li.append(coverageRow);
     }
 
     if (result.status === "untrusted" && result.message) {
@@ -647,8 +691,6 @@ class SignaturePropertiesManager {
         errorCode: "BRIDGE_ERROR",
         message: ex?.message ?? null,
         certificate: null,
-        documentModifiedAfterSigning: !signature.coversWholeDocument,
-        modificationsAfterSignature: signature.modificationsAfterSignature,
       };
     }
     this.#pendingVerify.delete(signature.id);
@@ -677,24 +719,14 @@ class SignaturePropertiesManager {
       button.classList.add("state-loading");
       return;
     }
-    switch (this.#worst) {
-      case "invalid":
-      case "revoked":
-      case "unknown":
-        // `unknown` means the verifier completed but could not give a
-        // definitive answer (unsupported subfilter, bridge error,
-        // CMS NOT_YET_ATTEMPTED). Treat that as a verification failure
-        // — the loading dots are reserved for the in-flight case
-        // handled above.
-        button.classList.add("state-error");
-        break;
-      case "expired":
-      case "untrusted":
-        button.classList.add("state-warn");
-        break;
-      default:
-        button.classList.add("state-verified");
-    }
+    // The `severity` buckets are named to match the `state-*` modifiers,
+    // so the banner and the toolbar icon can never disagree. Note that
+    // `unknown` maps to `error`: the verifier completed but could not give
+    // a definitive answer (unsupported subfilter, bridge error, CMS
+    // NOT_YET_ATTEMPTED), which is a verification failure — the loading
+    // dots are reserved for the in-flight case handled above.
+    const { severity } = this.#bannerState;
+    button.classList.add(`state-${severity}`);
   }
 }
 

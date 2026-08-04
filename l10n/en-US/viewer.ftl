@@ -828,6 +828,13 @@ pdfjs-digital-signature-properties-banner-revoked =
        *[other] Document signed with { $count } revoked certificates
     }
 
+## Shown instead of the variants above when every signature verified but
+## the document still contains content that none of them covers — almost
+## always an incremental update appended after signing. Takes no $count
+## because it describes the document as a whole, not a set of signatures.
+
+pdfjs-digital-signature-properties-banner-modified = Document contains changes that were not signed
+
 ## Per-signature status row. Only three distinct strings are needed:
 ## the signature crypto either verified (the cert chain may still be
 ## untrusted/expired/revoked, but that's surfaced on the cert row
@@ -853,6 +860,14 @@ pdfjs-digital-signature-properties-certificate-untrusted-untrusted-issuer = Cert
 pdfjs-digital-signature-properties-certificate-expired = Certificate: Expired
 pdfjs-digital-signature-properties-certificate-expired-with-date = Certificate: Expired ({ DATETIME($dateObj, dateStyle: "medium") })
 pdfjs-digital-signature-properties-certificate-revoked = Certificate: Revoked
+
+## Per-signature coverage row, shown when a signature's signed byte range
+## stops short of the end of the file — i.e. the document was changed
+## after it was signed, typically by appending an incremental update.
+## Only shown for the outermost signature: earlier revisions of a
+## multi-signed document always stop short by design.
+
+pdfjs-digital-signature-properties-coverage-partial = Coverage: Document contains unsigned changes
 
 ##
 

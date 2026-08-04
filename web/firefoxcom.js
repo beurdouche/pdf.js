@@ -592,8 +592,6 @@ class SignatureVerifier {
         errorCode: "SUBFILTER_NOT_SUPPORTED",
         message: signature.subFilter,
         certificate: null,
-        documentModifiedAfterSigning: !signature.coversWholeDocument,
-        modificationsAfterSignature: signature.modificationsAfterSignature,
       };
     }
 
@@ -610,8 +608,6 @@ class SignatureVerifier {
         errorCode: "BRIDGE_ERROR",
         message: ex?.message ?? null,
         certificate: null,
-        documentModifiedAfterSigning: !signature.coversWholeDocument,
-        modificationsAfterSignature: signature.modificationsAfterSignature,
       };
     }
     if (!response || response.error) {
@@ -620,8 +616,6 @@ class SignatureVerifier {
         errorCode: response?.error ?? "EMPTY_RESPONSE",
         message: null,
         certificate: null,
-        documentModifiedAfterSigning: !signature.coversWholeDocument,
-        modificationsAfterSignature: signature.modificationsAfterSignature,
       };
     }
 
@@ -634,8 +628,6 @@ class SignatureVerifier {
         errorCode: "EMPTY_RESPONSE",
         message: null,
         certificate: null,
-        documentModifiedAfterSigning: !signature.coversWholeDocument,
-        modificationsAfterSignature: signature.modificationsAfterSignature,
       };
     }
     const { status, errorCode } = mapVerificationStatus(
@@ -647,8 +639,6 @@ class SignatureVerifier {
       errorCode,
       message: entry.message ?? null,
       certificate: entry.certificate ?? null,
-      documentModifiedAfterSigning: !signature.coversWholeDocument,
-      modificationsAfterSignature: signature.modificationsAfterSignature,
     };
   }
 

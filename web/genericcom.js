@@ -183,8 +183,6 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
           errorCode: "SUBFILTER_NOT_SUPPORTED",
           message: signature.subFilter,
           certificate: null,
-          documentModifiedAfterSigning: !signature.coversWholeDocument,
-          modificationsAfterSignature: signature.modificationsAfterSignature,
         };
       }
 
@@ -193,8 +191,6 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
         errorCode: "EMPTY_RESPONSE",
         message: null,
         certificate: null,
-        documentModifiedAfterSigning: !signature.coversWholeDocument,
-        modificationsAfterSignature: signature.modificationsAfterSignature,
       };
     }
 
