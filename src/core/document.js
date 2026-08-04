@@ -2050,11 +2050,32 @@ class PDFDocument {
     }
   }
 
-  async #coversWholeDocument(signedEnd, modificationsAfterSignature) {
+  async #coversWholeDocument(
+    byteRange,
+    pkcs7Length,
+    modificationsAfterSignature
+  ) {
     if (modificationsAfterSignature > 0) {
       return false;
     }
 
+    // The two signed spans straddle the /Contents hex string, and the gap
+    // between them must hold nothing but that string. A wider gap is
+    // unsigned content parked between the spans, which covers the document
+    // no better than an appended incremental update does.
+    //
+    // Producers differ on whether the `<` / `>` delimiters fall inside the
+    // signed spans or inside the gap, so both `2 * pkcs7Length` and
+    // `2 * pkcs7Length + 2` are legitimate; anything else is not. Keep the
+    // window this tight — a gap even a few bytes wider than the blob it is
+    // supposed to contain has no benign explanation.
+    const [a, b, c, d] = byteRange;
+    const contentsGap = c - (a + b) - 2 * pkcs7Length;
+    if (contentsGap !== 0 && contentsGap !== 2) {
+      return false;
+    }
+
+    const signedEnd = c + d;
     const fileLength = this.stream.end;
     for (
       let begin = signedEnd;
@@ -2189,7 +2210,8 @@ class PDFDocument {
             signature.modificationsAfterSignature =
               this.xref.countUpdatesAfter(signedEnd);
             signature.coversWholeDocument = await this.#coversWholeDocument(
-              signedEnd,
+              signature.byteRange,
+              signature.pkcs7.length,
               signature.modificationsAfterSignature
             );
           })

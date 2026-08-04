@@ -259,9 +259,21 @@ describe("document", function () {
     });
 
     describe("getSignatures", function () {
+      // A real signature's two signed spans straddle the /Contents hex
+      // string and nothing else, so default /Contents to exactly fill the
+      // gap (delimiters included). Whole-document coverage checks that
+      // invariant, so a mock with an arbitrary length would never qualify.
+      function contentsFillingGap(byteRange) {
+        if (byteRange.length !== 4) {
+          return "00".repeat(8); // Malformed; rejected before it is read.
+        }
+        const [a, b, c] = byteRange;
+        return "0".repeat((c - a - b - 2) / 2);
+      }
+
       function makeSigDict({
         byteRange,
-        contents = "00".repeat(8),
+        contents = contentsFillingGap(byteRange),
         subFilter = "adbe.pkcs7.detached",
         name = null,
         reason = null,
@@ -407,6 +419,75 @@ describe("document", function () {
         const signatures = await pdfDocument.signatures;
         expect(signatures.length).toEqual(1);
         expect(signatures[0].coversWholeDocument).toBeFalse();
+      });
+
+      it("clears whole-document coverage when the /Contents gap is oversized", async function () {
+        const acroForm = new Dict();
+        acroForm.set("SigFlags", 3);
+
+        const sigRef = Ref.get(44, 0);
+        const fieldRef = Ref.get(45, 0);
+        // The gap between the signed spans is 80 bytes but /Contents only
+        // accounts for 10 of them, so 70 bytes in the middle of the file
+        // are signed by nobody — even though the tail is clean and no
+        // incremental update was appended.
+        const sigDict = makeSigDict({
+          byteRange: [0, 20, 100, 20],
+          contents: "0".repeat(4),
+        });
+        const fieldDict = makeSigField({ T: "sig_gap", sigRef });
+
+        const xref = new XRefMock([
+          { ref: sigRef, data: sigDict },
+          { ref: fieldRef, data: fieldDict },
+        ]);
+        acroForm.assignXref(xref);
+        sigDict.assignXref(xref);
+        fieldDict.assignXref(xref);
+
+        acroForm.set("Fields", [fieldRef]);
+
+        const documentStream = new StringStream(
+          "A".repeat(120) + " ".repeat(80)
+        );
+        const pdfDocument = getDocument(acroForm, xref, documentStream);
+        const signatures = await pdfDocument.signatures;
+        expect(signatures.length).toEqual(1);
+        expect(signatures[0].coversWholeDocument).toBeFalse();
+      });
+
+      it("reports whole-document coverage when the delimiters are signed", async function () {
+        const acroForm = new Dict();
+        acroForm.set("SigFlags", 3);
+
+        const sigRef = Ref.get(46, 0);
+        const fieldRef = Ref.get(47, 0);
+        // Some producers keep the `<` / `>` delimiters inside the signed
+        // spans, leaving a gap of exactly `2 * pkcs7Length`. That is just
+        // as complete as leaving them in the gap.
+        const sigDict = makeSigDict({
+          byteRange: [0, 20, 30, 20],
+          contents: "0".repeat(5),
+        });
+        const fieldDict = makeSigField({ T: "sig_tight", sigRef });
+
+        const xref = new XRefMock([
+          { ref: sigRef, data: sigDict },
+          { ref: fieldRef, data: fieldDict },
+        ]);
+        acroForm.assignXref(xref);
+        sigDict.assignXref(xref);
+        fieldDict.assignXref(xref);
+
+        acroForm.set("Fields", [fieldRef]);
+
+        const documentStream = new StringStream(
+          "A".repeat(50) + " ".repeat(150)
+        );
+        const pdfDocument = getDocument(acroForm, xref, documentStream);
+        const signatures = await pdfDocument.signatures;
+        expect(signatures.length).toEqual(1);
+        expect(signatures[0].coversWholeDocument).toBeTrue();
       });
 
       it("walks Kids recursively to find nested signature fields", async function () {

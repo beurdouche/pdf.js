@@ -2239,6 +2239,25 @@ describe("api", function () {
       await loadingTask.destroy();
     });
 
+    it("gets whole-document coverage when the /Contents delimiters are signed", async function () {
+      const loadingTask = getDocument(
+        buildGetDocumentParams("signed_verified.pdf")
+      );
+      const pdfDoc = await loadingTask.promise;
+      const signatures = await pdfDoc.getSignatures();
+
+      expect(signatures.length).toEqual(1);
+      // This producer keeps the `<` / `>` around /Contents inside the
+      // signed spans, so the gap between them is exactly `2 * pkcs7Length`
+      // rather than `2 * pkcs7Length + 2` as in `issue20433.pdf` above.
+      // Both layouts are complete and must report full coverage.
+      expect(signatures[0].byteRange).toEqual([0, 644, 8836, 1416]);
+      expect(signatures[0].modificationsAfterSignature).toEqual(0);
+      expect(signatures[0].coversWholeDocument).toBeTrue();
+
+      await loadingTask.destroy();
+    });
+
     it("gets signature metadata without fetching later revisions", async function () {
       const baseData = await DefaultFileReaderFactory.fetch({
         path: TEST_PDFS_PATH + "signed_verified.pdf",
